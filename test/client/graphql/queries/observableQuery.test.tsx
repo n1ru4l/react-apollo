@@ -216,6 +216,70 @@ describe('[queries] observableQuery', () => {
     expect(queryObservable1).toBe(queryObservable2);
   });
 
+  it('will update an active GraphQL container with an empty query result when the client store is resetted', done => {
+    const query = gql`
+      query me {
+        me {
+          login
+        }
+      }
+    `;
+    const data = { me: { login: `luke1` } };
+    const data2 = { me: { login: `luke2` } };
+
+    const link = mockSingleLink(
+      { request: { query }, result: { data } },
+      { request: { query }, result: { data: data2 } },
+    );
+    const client = new ApolloClient({
+      link,
+      cache: new Cache({ addTypename: false }),
+    });
+
+    const logs = [];
+
+    class LoginDisplay extends React.Component<any, any> {
+      render() {
+        logs.push(JSON.parse(JSON.stringify(this.props.data)));
+        return null;
+      }
+    }
+
+    const LoginDisplayWithDate = graphql(query)(LoginDisplay);
+
+    const wrapper = mount(
+      <ApolloProvider client={client}>
+        <LoginDisplayWithDate />
+      </ApolloProvider>,
+    );
+
+    setTimeout(() => {
+      Promise.resolve()
+        .then(() => client.resetStore())
+        .then(() => {
+          setTimeout(() => {
+            expect(logs).toEqual([
+              { variables: {}, loading: true, networkStatus: 1 },
+              {
+                variables: {},
+                loading: false,
+                networkStatus: 7,
+                me: { login: 'luke1' },
+              },
+              { variables: {}, loading: true, networkStatus: 1 },
+              {
+                variables: {},
+                loading: false,
+                networkStatus: 7,
+                me: { login: 'luke2' },
+              },
+            ]);
+            wrapper.unmount();
+          }, 10);
+        });
+    }, 10);
+  });
+
   it('will recycle `ObservableQuery`s when re-rendering a portion of the tree', done => {
     const query = gql`
       query people {
@@ -227,10 +291,7 @@ describe('[queries] observableQuery', () => {
       }
     `;
     const data = { allPeople: { people: [{ name: 'Luke Skywalker' }] } };
-    const link = mockSingleLink(
-      { request: { query }, result: { data } },
-      { request: { query }, result: { data } },
-    );
+    const link = mockSingleLink({ request: { query }, result: { data } });
     const client = new ApolloClient({
       link,
       cache: new Cache({ addTypename: false }),
